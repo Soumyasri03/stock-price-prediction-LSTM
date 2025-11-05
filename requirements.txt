@@ -1,0 +1,10 @@
+pandas
+numpy
+pandas-datareader
+yfinance
+keras
+scikit-learn
+tensorflow
+plotly-express
+matplotlib
+streamlit
