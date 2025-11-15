@@ -6,5 +6,6 @@ keras
 scikit-learn
 tensorflow
 plotly-express
+keras.models
 matplotlib
 streamlit

@@ -6,11 +6,41 @@ import yfinance as yf
 import plotly_express as px
 import streamlit as st
 import  datetime as dt
-import os
 
 import plotly.graph_objects as go
 
-#import talib as ta
+# Helper function to ensure Close column is 1D
+def ensure_1d_close(df):
+    """Ensure the Close column in DataFrame is 1D"""
+    # Handle MultiIndex columns if present
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.droplevel(1)
+    
+    if 'Close' in df.columns:
+        close_values = df['Close'].values
+        # Force to 1D array - use multiple methods to be absolutely sure
+        while close_values.ndim > 1:
+            close_values = close_values.squeeze()
+        close_values = np.array(close_values).flatten()
+        close_values = close_values.ravel()  # Final guarantee of 1D
+        # Ensure it's a proper 1D Series
+        df['Close'] = pd.Series(close_values, index=df.index, name='Close')
+    return df
+
+# Custom talib replacement using pandas/numpy
+class ta:
+    @staticmethod
+    def EMA(close_prices, timeperiod):
+        close_prices = np.array(close_prices).squeeze()
+        series = pd.Series(close_prices)
+        return series.ewm(span=timeperiod, adjust=False).mean().values
+    
+    @staticmethod
+    def WMA(close_prices, timeperiod):
+        close_prices = np.array(close_prices).squeeze()
+        series = pd.Series(close_prices)
+        weights = np.arange(1, timeperiod + 1)
+        return series.rolling(window=timeperiod).apply(lambda x: np.dot(x, weights) / weights.sum(), raw=True).values
 #from talib import SMA,EMA,WMA
 from sklearn.preprocessing import MinMaxScaler
 from keras.models import load_model
@@ -23,14 +53,51 @@ from keras.models import load_model
 
 
 st.title('STOCK TREND PREDICTION USING LSTM ON GLOBAL STOCK MARKETS')
-ticker=st.text_input('Enter Ticker Name','KOTAKBANK.NS')
+raw_ticker = st.text_input('Enter Ticker Name', 'KOTAKBANK.NS')
+ticker = raw_ticker.strip().upper().replace(' ', '')
 
-start=st.date_input('Start', value=pd.to_datetime('2010-01-01'))
-end=st.date_input('End', value=pd.to_datetime('today'))
+start = st.date_input('Start', value=pd.to_datetime('2010-01-01'))
+end = st.date_input('End', value=pd.to_datetime('today'))
 
+if not ticker:
+    st.warning('Please enter a valid ticker symbol (e.g., TVSMOTOR.NS).')
+    st.stop()
 
-df = yf.download(ticker, start=start, end=end, auto_adjust=False)
-fig = px.line(df, x=df.index, y=df['Close'].squeeze(), title=ticker)
+if raw_ticker and raw_ticker.strip() and raw_ticker.strip().upper().replace(' ', '') != raw_ticker.strip().upper():
+    st.info(f'Interpreting input `{raw_ticker}` as `{ticker}`. '
+            'Use the official exchange symbol to avoid errors (e.g., TVSMOTOR.NS).')
+
+if '.' not in ticker and not ticker.endswith('.NS') and not ticker.endswith('.BO'):
+    st.warning('It looks like you might be missing the exchange suffix (e.g., `.NS`).')
+
+if not ticker:
+    st.warning('Please enter a valid ticker symbol (e.g., TVSMOTOR.NS).')
+    st.stop()
+
+try:
+    df = yf.download(ticker, start=start, end=end, auto_adjust=False, progress=False)
+except Exception as error:
+    st.error(f'Unable to download data for `{ticker}`.\nDetails: {error}')
+    st.stop()
+
+if df.empty or 'Close' not in df.columns:
+    st.error(
+        'No market data returned.\n'
+        f'- Entered: `{raw_ticker}`\n'
+        f'- Queried: `{ticker}`\n'
+        'Double-check that the ticker exists on the selected exchange '
+        '(e.g., use `TVSMOTOR.NS` for TVS Motor Company on NSE).'
+    )
+    st.stop()
+# Ensure Close column is 1D (handles MultiIndex internally)
+df = ensure_1d_close(df)
+# Final verification - ensure Close is truly 1D before plotting
+if df['Close'].values.ndim > 1:
+    df['Close'] = pd.Series(df['Close'].values.flatten(), index=df.index, name='Close')
+# Reset index to make it a column for plotly express
+df_plot = df.reset_index()
+# Use plotly express with column names
+fig = px.line(df_plot, x=df_plot.columns[0], y='Close', title=ticker)
 
 st.plotly_chart(fig)
 
@@ -100,15 +167,8 @@ for i in range(100, data_training_scaled.shape[0]):
 
 x_train, y_train = np.array(x_train), np.array(y_train)
 
-# Load the trained model from local project directory
-project_dir = os.path.dirname(os.path.abspath(__file__))
-local_model_path = os.path.join(project_dir, 'keras_model.h5')
-
-if not os.path.exists(local_model_path):
-    st.error("Model file 'keras_model.h5' not found in the project folder. Please run the 'LSTM.ipynb' notebook to train and save the model, or place the trained file in the project directory.")
-    st.stop()
-
-model = load_model(local_model_path)
+# Load the trained model
+model = load_model('keras_model.h5')
 
 
 
@@ -184,7 +244,7 @@ predicted_dates = pd.date_range(start=df.index[-1] + dt.timedelta(days=1), perio
 predicted_df = pd.DataFrame(predicted_prices, index=predicted_dates, columns=['Predicted Price'])
 
 # Plot the graph using Plotly Express
-fig = px.line(df, x=df.index, y='Close', title=ticker)
+fig = px.line(df, x=df.index, y=df['Close'].squeeze(), title=ticker)
 fig.add_scatter(x=predicted_dates, y=predicted_prices.flatten(), mode='lines', name='Predicted Price')
 st.plotly_chart(fig)
 
@@ -205,6 +265,11 @@ def calculate_ado(df):
 
 def plot_ado_close(df, ado, start_date, end_date):
     df = df.loc[start_date:end_date]
+    ado = ado.loc[start_date:end_date].squeeze()
+    # Ensure ado is 1D
+    if isinstance(ado, pd.Series):
+        ado = ado.values
+    ado = np.array(ado).flatten()
 
     fig_ado = px.line(df, x=df.index, y=ado)
     fig_ado.update_layout(
@@ -214,7 +279,7 @@ def plot_ado_close(df, ado, start_date, end_date):
     fig_ado.update_xaxes(rangeslider_visible=True)
     st.plotly_chart(fig_ado)
 
-    fig_close = px.line(df, x=df.index, y='Close')
+    fig_close = px.line(df, x=df.index, y=df['Close'].squeeze())
     fig_close.update_layout(
         title='Closing Price',
         xaxis_title='Date',
@@ -241,7 +306,8 @@ def calculate_ado(df):
 
 def plot_ado_close(df, ado, start_date, end_date):
     df = df.loc[start_date:end_date]
-    df['ADO'] = ado
+    ado_filtered = ado.loc[start_date:end_date].squeeze()
+    df['ADO'] = ado_filtered
 
     fig = px.line(df, x=df.index, y=['Close', 'ADO'])
     fig.update_layout(
@@ -264,6 +330,7 @@ def plot_ado_close(df, ado, start_date, end_date):
 
 st.subheader("MACD Indicator")
 df = yf.download(ticker, start, end)
+df = ensure_1d_close(df)  # Ensure Close column is 1D
 def plot_macd_graph(df):
     # Calculate MACD
     df['MACD'] = df['Close'].ewm(span=12).mean() - df['Close'].ewm(span=26).mean()
@@ -293,6 +360,7 @@ def plot_macd_graph(df):
 
 
 df = yf.download(ticker, start, end)
+df = ensure_1d_close(df)  # Ensure Close column is 1D
 
 if df.empty:
     st.warning('No data available for the selected symbol and date range')
@@ -308,6 +376,8 @@ wma_period_13 = 13
 close_prices = df['Close'].values
 wma_13 = ta.WMA(close_prices, timeperiod=wma_period_13)
 df['WMA_13'] = wma_13
+df['Close'] = df['Close'].squeeze()
+df['WMA_13'] = df['WMA_13'].squeeze()
 fig = px.line(df, x=df.index, y=['Close', 'WMA_13'], title='WMA and Closing Price')  # Include 'WMA_13' in y
 fig.update_traces(line=dict(color='red'), selector=dict(name='WMA_13'))  # Use 'WMA_13' as the selector
 fig.update_layout(xaxis_title='Date', yaxis_title='Price', title_text='Time Series Data',
@@ -323,7 +393,9 @@ st.subheader('50EMA VS CLOSING PRICE')
 ema_period_50 = 50  
 close_prices = df['Close'].values
 ema_50 = ta.EMA(close_prices, timeperiod=ema_period_50)
-df['EMA_50'] = ema_50  
+df['EMA_50'] = ema_50
+df['Close'] = df['Close'].squeeze()
+df['EMA_50'] = df['EMA_50'].squeeze()
 fig = px.line(df, x=df.index, y=['Close', 'EMA_50'], title='EMA50 and Closing Price')
 fig.update_traces(line=dict(color='red'), selector=dict(name='EMA_50'))
 fig.update_layout(xaxis_title='Date', yaxis_title='Price')
@@ -337,7 +409,9 @@ st.subheader('100EMA VS CLOSING PRICE')
 ema_period_100 = 100  
 close_prices = df['Close'].values
 ema_100 = ta.EMA(close_prices, timeperiod=ema_period_50)
-df['EMA_100'] = ema_100  
+df['EMA_100'] = ema_100
+df['Close'] = df['Close'].squeeze()
+df['EMA_100'] = df['EMA_100'].squeeze()
 fig = px.line(df, x=df.index, y=['Close', 'EMA_100'], title='EMA100 and Closing Price')
 fig.update_traces(line=dict(color='red'), selector=dict(name='EMA_100'))
 fig.update_layout(xaxis_title='Date', yaxis_title='Price')
@@ -351,7 +425,9 @@ st.subheader('200EMA VS CLOSING PRICE')
 ema_period_200 = 200  
 close_prices = df['Close'].values
 ema_200 = ta.EMA(close_prices, timeperiod=ema_period_200)
-df['EMA_200'] = ema_200  
+df['EMA_200'] = ema_200
+df['Close'] = df['Close'].squeeze()
+df['EMA_200'] = df['EMA_200'].squeeze()
 fig = px.line(df, x=df.index, y=['Close', 'EMA_200'], title='EMA200 and Closing Price')
 fig.update_traces(line=dict(color='red'), selector=dict(name='EMA_200'))
 fig.update_layout(xaxis_title='Date', yaxis_title='Price')
@@ -370,9 +446,13 @@ close_prices = df['Close'].values
 ema_50 = ta.EMA(close_prices, timeperiod=ema_period_50)
 ema_100 = ta.EMA(close_prices, timeperiod=ema_period_100)
 ema_200 = ta.EMA(close_prices, timeperiod=ema_period_200)
-df['EMA_50'] = ema_50  
+df['EMA_50'] = ema_50
 df['EMA_100'] = ema_100
 df['EMA_200'] = ema_200
+df['Close'] = df['Close'].squeeze()
+df['EMA_50'] = df['EMA_50'].squeeze()
+df['EMA_100'] = df['EMA_100'].squeeze()
+df['EMA_200'] = df['EMA_200'].squeeze()
 fig = px.line(df, x=df.index, y=['Close', 'EMA_50', 'EMA_100','EMA_200'], title='EMA and Closing Price')
 fig.update_traces(line=dict(color='red'), selector=dict(name='EMA_50'))
 fig.update_traces(line=dict(color='pink'), selector=dict(name='EMA_100'))
@@ -431,6 +511,7 @@ def plot_macd_bollinger_candlestick(df):
 
 
 df = yf.download(ticker, start, end)
+df = ensure_1d_close(df)  # Ensure Close column is 1D
 
 if df.empty:
     st.warning('No data available for the selected symbol and date range.')
