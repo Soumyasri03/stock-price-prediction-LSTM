@@ -1,85 +1,57 @@
-# Stock Market Trend Prediction with LSTM
+# Invoice Automation App
 
-An intelligent stock trend analysis and forecasting system that uses **Long Short-Term Memory (LSTM)** neural networks and technical indicators to visualize, predict, and analyze stock price movements.
+This project is a Streamlit-based web application designed to automate the extraction, indexing, querying, and report generation . The application utilizes LlamaIndex, LangChain, HuggingFace embeddings, and a Groq LLM to read invoice PDFs, extract detailed information, store the processed data in a vector index, and allow users to query invoices or generate Excel reports based on specific time periods.
 
-This application provides an interactive dashboard built with **Streamlit**, where users can enter any stock ticker, view historical data, analyze technical indicators, and generate stock price predictions for future dates.
-
----
-
-## Key Features
-
-### Stock Data Exploration
-- Fetches real-time stock data using Yahoo Finance (`yfinance`).
-- Allows users to select stock tickers and custom date ranges.
-- Displays historical Open, High, Low, Close, and Volume data in an interactive table.
-
-### LSTM-Based Price Prediction
-- Uses trained LSTM models to forecast stock price trends.
-- Predicts next-day stock movement and generates future trend lines.
-- Supports user-defined number of future days to forecast.
-
-### Visual Stock Insights
-- **Time Series Graphs:** Close Price vs Time.
-- **Moving Averages:** 100-day and 200-day SMA plotted with price.
-- **Advanced Moving Averages:** 50-, 100-, 200-day Exponential Moving Averages (EMA).
-- **Bollinger Bands:** Volatility visualized with Upper, Lower, and SMA bands.
-
-### Technical Indicators Included
-
-| Indicator | Purpose |
-|-----------|---------|
-| **MACD** | Detects trend direction and momentum. |
-| **ADO** | Measures money flow using price and volume. |
-| **WMA** | Emphasizes recent price movements. |
-| **EMA (50, 100, 200)** | Tracks short, mid, and long-term trends. |
-| **Bollinger Bands** | Visualizes volatility around moving averages. |
-| **Annual Return** | Calculates yearly return based on daily percentage change. |
+The purpose of this project is to simplify manual invoice management and build an automated workflow for analyzing multiple invoices efficiently.
 
 ---
 
-## How the Model Works
+## Features
 
-### 1. Data Collection
-- Stock data is fetched with `yfinance`.
-- User selects date range and ticker (e.g., `AAPL`, `TSLA`, `KOTAKBANK.NS`).
+### 1. Upload and Process Invoices
+- Upload one or multiple invoice PDFs.
+- Automatically extracts:
+  - Vendor name and address  
+  - Buyer name and address  
+  - Invoice number  
+  - Invoice date  
+  - Item descriptions  
+  - Subtotal  
+  - Tax  
+  - Discount  
+  - Total amount  
+- Extracted data is converted into structured JSON and indexed for querying.
 
-### 2. Data Preprocessing
-- Only the Close price is used.
-- Data is split: 80% training, 20% testing.
-- MinMaxScaler normalizes values between 0 and 1.
-- Uses 100 previous time steps to predict the next step.
+### 2. Query Invoices Using Natural Language
+- Ask questions about any invoice.
+- Chat-based system supports follow-up questions using chat history.
+- Uses semantic search to retrieve the most relevant invoice entries.
+- Answers strictly rely on the indexed invoice information.
 
-### 3. Model Training
-- LSTM model is trained in `LSTM.ipynb`.
-- Saved as `keras_model.h5` for reuse.
-
-### 4. Prediction and Forecasting
-- Predicts closing prices for test data.
-- Visualizes actual vs predicted stock prices.
-- Forecasts future stock values based on user input.
+### 3. Generate Excel Reports
+- Export invoice data to Excel based on:
+  - Month (e.g., January 2025)
+  - Date range (e.g., 21/03/2025 to 21/06/2025)
+  - Natural language (e.g., last month, this month)
+  - Single date (e.g., 04/09/2025)
+  - Quarter (e.g., Q1 2025)
+- Filtered invoice results are saved into an Excel spreadsheet.
 
 ---
 
-## Tech Stack
+## Technologies Used
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | Streamlit |
-| Backend | Python |
-| Machine Learning | TensorFlow / Keras (LSTM) |
-| Data Source | Yahoo Finance (`yfinance`) |
-| Visualization | Plotly, Matplotlib |
-| Data Handling | Pandas, NumPy |
-| Scaling | Scikit-learn |
+- Python  
+- Streamlit  
+- LangChain  
+- LlamaIndex  
+- HuggingFace Embeddings  
+- Groq LLM (llama-3.1-8b-instant)  
+- Pandas  
+- Pydantic  
+- DateParser  
 
 ---
 
 ## Project Structure
-
-```
-project/
-├── stock.py               # Main Streamlit app
-├── LSTM.ipynb             # LSTM model training script
-├── keras_model.h5         # Saved trained model
-├── requirements.txt       # Dependencies
 
